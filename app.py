@@ -1,29 +1,5 @@
 # via-adt_assessment.py
 # VIA × ADT 統合診断アセスメント Web App (Gemini API版 / v2)
-#
-# v2での変更点（Claudeによる修正）:
-#   1. Gemini API KeyをSecrets管理に変更（サイドバー入力を廃止）
-#   2. サイドバーを廃止し、言葉遣い・トーン切替をタイトル直下に移動
-#   3. 質問を「1強み1問」から「1強み2問」に増強（信頼性向上）
-#   4. 同率順位を考慮したTop5/Bottom2表示
-#   5. レポート生成後にNGワード（評価・断定的な表現）をスキャンし、
-#      検出時は1回だけ再生成を試みる（厳格な制約の機械的な担保）
-#   6. API呼び出しのtry/exceptによるエラーハンドリング
-#   7. モデル名を gemini-2.5-flash から gemini-3.5-flash に更新
-#      （2.5-flashは2026/10/16にDeveloper APIで提供終了予定のため）
-#   8. パターンC・D（Claude書き下ろしの独自肯定文、各48問）を追加。
-#      逆転項目は採用せず（黙従バイアスの検出よりも、逆転項目自体が
-#      もたらす測定汚染=method effectの方がコストが大きいと判断）、
-#      素直な肯定文のバリエーションを積み増す方針に統一。
-#   9. 出題方式を固定パターン(A/B/C)選択から、strengthごとの項目プール
-#      （元60問＋C48問＋D48問）からのランダム抽選（2問/strength）に変更。
-#      項目を追加するほど組み合わせ数が増えるため、再受検時に
-#      「前回と同じ組み合わせ・記憶に基づく恣意的な高評価」に
-#      当たりにくくなる。
-#
-# 未対応（今回は意図的に保留）:
-#   - アカウント化・受検履歴の永続化（DB導入が必要なため別対応とする）
-#   - 自由記述欄のプロンプトインジェクション対策（単一ユーザー利用が前提のため）
 
 import random
 from collections import OrderedDict, defaultdict
@@ -44,8 +20,6 @@ MODEL_NAME = "gemini-3.5-flash"
 
 # ---------------------------------------------------------
 # 2. 質問データ（60問マスター：1強みにつき2〜3問）
-#    ※ 元の60問リストをそのまま採用し、strengthごとにグループ化して
-#      パターンA/Bを機械的に生成する（手作業での重複・不整合を防ぐため）
 # ---------------------------------------------------------
 QUESTION_BANK = [
     # I. 知性・知識の強み (Wisdom)
@@ -241,37 +215,26 @@ QUESTION_BANK = [
      "cas": "自分の日々の行動が、世の中や未来にどんな価値を持つかを意識してる？"},
 ]
 
-# id を採番
 for _i, _q in enumerate(QUESTION_BANK, start=1):
     _q["id"] = _i
 
-# strengthごとにグループ化（出現順を保持）
 _grouped = OrderedDict()
 for q in QUESTION_BANK:
     _grouped.setdefault(q["strength"], []).append(q)
 
 
 def _build_pattern(selector):
-    """strengthごとにselectorで2問選び、パターンを組み立てる。
-    strengthの保有問題数が2問しかない場合、A/Bで同じ2問になるのはやむを得ない
-    （元データに3問目が存在しないため）。"""
     pattern = []
     for _strength, items in _grouped.items():
         pattern.extend(selector(items))
     return pattern
 
 
-# パターンA：各strengthの先頭2問
 PATTERN_A = _build_pattern(lambda items: items[:2])
-# パターンB：各strengthの末尾2問（3問持つstrengthはAと1問だけ入れ替わる）
 PATTERN_B = _build_pattern(lambda items: items[-2:])
 
 # ---------------------------------------------------------
 # 2b. パターンC（Claudeによる書き下ろし・独自表現）
-#    QUESTION_BANK(A/B由来)とは別に、「24の強み」という一般的な分類概念に基づき
-#    Claudeが新規に文章を作成した48問（1強み2問）。VIA-IS原文の言い回しを
-#    模倣しないよう、構文・語順・具体例を意図的に変えて執筆している。
-#    あくまで疑似測定であり、正式なVIA-IS等とは別物である旨は変わらない。
 # ---------------------------------------------------------
 QUESTION_BANK_C = [
     # I. 知性・知識の強み (Wisdom)
@@ -431,18 +394,13 @@ QUESTION_BANK_C = [
      "cas": "自分の行動が、自分より大きな何かにつながってる感覚を持つことがある？"},
 ]
 
-# id を採番（QUESTION_BANKの続番として61から開始）
 for _i, _q in enumerate(QUESTION_BANK_C, start=len(QUESTION_BANK) + 1):
     _q["id"] = _i
 
-# 各strength2問ずつなので、そのままパターンCとして採用
 PATTERN_C = QUESTION_BANK_C
 
 # ---------------------------------------------------------
 # 2c. パターンD（Claudeによる書き下ろし・独自表現、第2弾）
-#    逆転項目は採用せず（黙従バイアスの検出よりも、逆転項目自体が
-#    もたらす測定汚染＝method effectの方が短い疑似テストではコストが大きい
-#    という判断のため）、素直な肯定文のバリエーションをさらに追加する。
 # ---------------------------------------------------------
 QUESTION_BANK_D = [
     {"cat": "I. 知性・知識の強み (Wisdom)", "strength": "好奇心",
@@ -596,17 +554,11 @@ QUESTION_BANK_D = [
      "cas": "自分がいなくなっても意味が残るようなことをしたいと思う？"},
 ]
 
-# id を採番（QUESTION_BANK + QUESTION_BANK_C の続番として109から開始）
 for _i, _q in enumerate(QUESTION_BANK_D, start=len(QUESTION_BANK) + len(QUESTION_BANK_C) + 1):
     _q["id"] = _i
 
 # ---------------------------------------------------------
 # 2d. 全体プールの構築 ＆ セッションごとのランダム抽選
-#    strengthごとに「元60問＋C48問＋D48問」を1つのプールにまとめ、
-#    毎セッション、strengthごとに2問をランダム抽選して出題する。
-#    パターンを固定のA/B/Cで分けるのではなく、抽選にすることで
-#    項目を追加するほど組み合わせ数が増え、記憶による恣意的回答
-#    （「前回はこう答えた」という一貫性バイアス）を軽減しやすくなる。
 # ---------------------------------------------------------
 _POOL_BY_STRENGTH = OrderedDict()
 for _q in QUESTION_BANK + QUESTION_BANK_C + QUESTION_BANK_D:
@@ -615,7 +567,6 @@ _CAT_BY_STRENGTH = {s: items[0]["cat"] for s, items in _POOL_BY_STRENGTH.items()
 
 
 def sample_active_questions(rng: random.Random):
-    """strengthごとに2問をランダム抽選し、カテゴリの出現順を保ったリストを返す。"""
     selected = []
     for strength, items in _POOL_BY_STRENGTH.items():
         k = min(2, len(items))
@@ -632,7 +583,6 @@ OPTION_LABELS = {
     5: "5: 非常にあてはまる",
 }
 
-# レポート生成後にチェックする禁止表現（ヒューリスティックであり完全ではない）
 NG_WORDS = ["未熟", "劣って", "劣る", "下がった", "低下", "退行", "欠陥", "ダメな", "だめな", "見劣り"]
 
 
@@ -649,7 +599,7 @@ except Exception:
     API_KEY = None
 
 # ---------------------------------------------------------
-# 4. タイトル ＆ トーン切替（サイドバー廃止・タイトル直下に設置）
+# 4. タイトル ＆ トーン切替
 # ---------------------------------------------------------
 st.title("🧠 VIA-ADT 統合診断アセスメント")
 st.caption("あなたの「強み（VIA）」と「葛藤パターン（ADT）」をAIがやさしく読み解きます。")
@@ -661,7 +611,6 @@ mode = st.radio(
     horizontal=True,
 )
 
-# セッションごとに、strengthごと2問をランダム抽選（同一セッション内は固定）
 if "active_questions" not in st.session_state:
     st.session_state["active_questions"] = sample_active_questions(random.Random())
 
@@ -689,7 +638,8 @@ with st.form("via_adt_form"):
     answers = {}
     current_cat = ""
 
-    for q in active_questions:
+    # ★ 画面上で「Q1, Q2, Q3...」と1から上順に連番で表示されるよう idx を使用
+    for idx, q in enumerate(active_questions, start=1):
         if q["cat"] != current_cat:
             current_cat = q["cat"]
             st.markdown(f"#### 🔹 {current_cat}")
@@ -697,7 +647,7 @@ with st.form("via_adt_form"):
         q_text = q["cas"] if "カジュアル" in mode else q["std"]
 
         answers[q["id"]] = st.radio(
-            f"**Q{q['id']}. {q_text}**",
+            f"**Q{idx}. {q_text}**",
             options=OPTIONS,
             format_func=lambda x: OPTION_LABELS[x],
             index=2,
@@ -836,7 +786,6 @@ if submitted:
 
         hits = find_ng_words(report_text)
         if hits:
-            # 禁止表現が見つかった場合、1回だけ強い指示を添えて再生成
             retry_prompt = (
                 prompt_content
                 + f"\n\n# 再確認（重要）\n前回の出力には禁止された評価的表現（{'、'.join(hits)}）"
