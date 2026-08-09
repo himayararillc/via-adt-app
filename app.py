@@ -1,4 +1,3 @@
-import random
 from datetime import datetime
 import os
 import streamlit as st
@@ -21,7 +20,7 @@ if not api_key:
     api_key = st.sidebar.text_input("Gemini API Key", type="password", help="AI Studioで取得したAPIキーを入力してください")
 
 # ---------------------------------------------------------
-# 2. 質問データ定義 (パターンA / パターンB)
+# 2. 質問データ定義 (パターンA：カジュアル / パターンB：プロフェッショナル)
 # ---------------------------------------------------------
 
 # --- パターンA (カジュアル・日常の言葉) ---
@@ -99,15 +98,9 @@ QUESTIONS_ADT_TEXT = [
     {"id": "adt_q1", "text": "1. 最近、仕事や日常で「空回りしている」「モヤモヤする」と感じる瞬間はどんな時ですか？"},
     {"id": "adt_q2", "text": "2. 「本当はこうしたいのに、ついブレーキをかけてしまう」と感じるパターンがあれば教えてください。"},
     {"id": "adt_q3", "text": "3. 自分の「強み」だと思っている部分が、逆に自分や周囲を疲れさせてしまっていると感じる場面はありますか？"},
+    {"id": "adt_q4", "text": "4. 「完璧でなければならない」や「成果を出さねば」と自分を追い込んでしまうことはありますか？"},
+    {"id": "adt_q5", "text": "5. その他、AIコーチに事前に伝えておきたい悩みや背景があればご自由にお書きください。"},
 ]
-
-
-# アクセス（ページ読み込み）のたびにランダムで A または B を選択する
-if "pattern_type" not in st.session_state:
-    st.session_state["pattern_type"] = random.choice(["A", "B"])
-
-# 選択されたパターンのデータセットを取得
-active_questions = QUESTIONS_PATTERN_A if st.session_state["pattern_type"] == "A" else QUESTIONS_PATTERN_B
 
 # ---------------------------------------------------------
 # 3. メイン表示 ＆ 入力フォーム
@@ -123,6 +116,14 @@ mode = st.radio(
     horizontal=True
 )
 
+# 選択された表示モードに連動して質問文をリアルタイム切り替え
+if "カジュアル" in mode:
+    active_questions = QUESTIONS_PATTERN_A
+    pattern_label = "カジュアル"
+else:
+    active_questions = QUESTIONS_PATTERN_B
+    pattern_label = "プロフェッショナル"
+
 st.markdown("---")
 
 # フォーム全体を包む
@@ -132,7 +133,7 @@ with st.form("via_adt_form"):
 
     st.markdown("---")
     st.subheader("2. 強みチェック（VIAアセスメント）")
-    st.info(f"現在のトーン：**{mode}** （表現パターン: {st.session_state['pattern_type']}）")
+    st.info(f"現在のトーン：**{mode}** （適用文面: {pattern_label}パターン）")
 
     # VIA回答の選択肢
     via_options = [
@@ -161,7 +162,7 @@ with st.form("via_adt_form"):
     st.subheader("3. 葛藤チェック（ADTアセスメント・自由記述）")
     st.caption("最近の振り返りや、日頃感じていることを自由に入力してください。（空欄でも構いません）")
 
-    # ADT回答エリア（自由記述テキストエリア）
+    # ADT回答エリア（自由記述テキストエリア・全5問）
     adt_answers = {}
     for q in QUESTIONS_ADT_TEXT:
         adt_answers[q["id"]] = st.text_area(
@@ -186,9 +187,7 @@ if submitted:
                 client = genai.Client(api_key=api_key)
 
                 # 回答の整形
-                # VIA
                 via_summary = "\n".join([f"- {q['text']}: {answers[q['id']]}" for q in active_questions])
-                # ADT（自由記述）
                 adt_summary = "\n".join([f"- {q['text']}\n  回答: {adt_answers[q['id']] if adt_answers[q['id']] else '（特になし）'}" for q in QUESTIONS_ADT_TEXT])
 
                 # プロンプトの組み立て
@@ -238,7 +237,6 @@ if submitted:
                 # 結果表示
                 st.success("🎉 アセスメントレポートが完成しました！")
                 st.markdown("---")
-                # レポート本体を表示
                 st.markdown(report_text)
 
                 # コピペ用エリア
