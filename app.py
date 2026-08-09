@@ -2,16 +2,22 @@ import streamlit as st
 from google import genai
 
 # ---------------------------------------------------------
-# 1. ページ基本設定 ＆ APIキー取得
+# 1. ページ基本設定
 # ---------------------------------------------------------
 st.set_page_config(page_title="VIA-ADT 統合診断アセスメント", page_icon="🧠", layout="centered")
 
+st.title("🧠 VIA-ADT 統合診断アセスメント")
+
+# APIキー入力（メイン画面に配置）
 api_key = st.secrets.get("GEMINI_API_KEY", "")
 if not api_key:
-    api_key = st.sidebar.text_input("Gemini API Key", type="password")
+    api_key = st.text_input("Gemini API Key", type="password")
+
+# モード選択
+mode = st.radio("表示モード", ["カジュアル", "プロフェッショナル"], horizontal=True)
 
 # ---------------------------------------------------------
-# 2. 質問データの定義（カジュアル・プロの両方を保持）
+# 2. 質問データの定義
 # ---------------------------------------------------------
 QUESTIONS = [
     {"strength": "好奇心", "casual": "新しいことや面白そうなものを見つけると、ワクワクしてすぐ調べたくなる？", "pro": "未知の話題や新しい分野に出会うと、自ら進んで調べたり試したりしたくなる。"},
@@ -43,9 +49,6 @@ QUESTIONS = [
 # ---------------------------------------------------------
 # 3. 入力フォーム
 # ---------------------------------------------------------
-st.title("🧠 VIA-ADT 統合診断アセスメント")
-mode = st.radio("表示モード", ["カジュアル", "プロフェッショナル"], horizontal=True)
-
 with st.form("main_form"):
     user_name = st.text_input("お名前")
     
@@ -53,11 +56,14 @@ with st.form("main_form"):
     label_key = "casual" if mode == "カジュアル" else "pro"
     
     answers = {}
-    via_options = [1, 2, 3, 4, 5]
-    
     st.subheader("強みチェック")
     for q in QUESTIONS:
-        answers[q["strength"]] = st.radio(q[label_key], via_options, index=2, horizontal=True)
+        answers[q["strength"]] = st.radio(
+            q[label_key], 
+            options=[1, 2, 3, 4, 5],
+            index=2, 
+            horizontal=True
+        )
     
     st.markdown("---")
     st.subheader("内省チェック")
@@ -65,7 +71,7 @@ with st.form("main_form"):
     adt_q2 = st.text_area("Q2.【自分のこだわり】その時、自分のどんな「大事にしたい考え・ルール」が邪魔された感じがした？")
     adt_q3 = st.text_area("Q3.【とった行動】その時、あなた自身は周りにどんな対応をとった？")
     adt_q4 = st.text_area("Q4.【心の裏の不安】もし相手に歩み寄って譲ったら、どんな嫌なことや不安が起こりそう？")
-    adt_q5 = st.text_area("Q5.【いつものクセ】普段は「周りの期待」と「自分の信念」、どちらを優先しやすい？")
+    adt_q5 = st.text_area("Q5.【いつものクセ】普段は「周りの期待」と「自分の信念」，どちらを優先しやすい？")
     adt_q6 = st.text_area("Q6.【これからの自分】これからどんな自分に成長していきたい？")
     
     submitted = st.form_submit_button("🚀 レポート生成")
@@ -74,13 +80,16 @@ with st.form("main_form"):
 # 4. レポート生成ロジック
 # ---------------------------------------------------------
 if submitted:
-    # 強み Top5 と Bottom2 の算出
-    sorted_scores = sorted(answers.items(), key=lambda x: x[1], reverse=True)
-    top5 = sorted_scores[:5]
-    bottom2 = sorted_scores[-2:]
+    if not api_key:
+        st.error("Gemini API Keyを入力してください。")
+    else:
+        # 強み Top5 と Bottom2 の算出
+        sorted_scores = sorted(answers.items(), key=lambda x: x[1], reverse=True)
+        top5 = sorted_scores[:5]
+        bottom2 = sorted_scores[-2:]
 
-    # プロンプト設計（ご提示いただいた内容を反映）
-    tone_instruction = """
+        # プロンプト設計
+        tone_instruction = """
 - 全体として専門用語を極力使わず、親しみやすく温かい「伴走者」のような言葉遣いで書いてください。
 - 難しい心理学用語（Subject/Object、Immunity to Changeなど）は「心のクセ」「お守り」「防衛反応」など分かりやすい言葉に噛み砕いて説明してください。
 """ if mode == "カジュアル" else """
@@ -88,7 +97,7 @@ if submitted:
 - エグゼクティブ・コーチとしてプロフェッショナルかつ説得力のあるトーンを保持してください。
 """
 
-    prompt_content = f"""
+        prompt_content = f"""
 # 役割定義
 あなたは「成人発達理論（ADT）」と「VIA（24の強み）」を統合した優秀なコーチです。
 クライアントの強みデータと6つの内省回答に基づき、深層的な気づきを与える『VIA-ADT 統合変容レポート』を作成してください。
@@ -122,7 +131,7 @@ if submitted:
 ## 5. 次のステップへ進むための3つのヒント
 """
 
-    client = genai.Client(api_key=api_key)
-    with st.spinner("診断中..."):
-        response = client.models.generate_content(model="gemini-2.5-flash", contents=prompt_content)
-        st.markdown(response.text)
+        client = genai.Client(api_key=api_key)
+        with st.spinner("診断レポートを作成中..."):
+            response = client.models.generate_content(model="gemini-2.5-flash", contents=prompt_content)
+            st.markdown(response.text)
