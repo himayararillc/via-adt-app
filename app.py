@@ -148,14 +148,6 @@ OPTION_LABELS = {
 # ---------------------------------------------------------
 # 3. サイドバー設定
 # ---------------------------------------------------------
-st.sidebar.title("⚙️ 設定")
-
-# Secrets（設定画面）からAPIキーを自動取得
-api_key = st.secrets.get("GEMINI_API_KEY", "")
-
-# 万が一Secretsの設定がない場合のみ入力枠を出す（設定済みなら表示されません）
-if not api_key:
-    api_key = st.sidebar.text_input("Gemini API Key", type="password", help="AI Studioで取得したAPIキーを入力してください")
 
 st.sidebar.markdown("---")
 
