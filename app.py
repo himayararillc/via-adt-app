@@ -169,9 +169,11 @@ mode = st.radio(
 if "カジュアル" in mode:
     active_questions = QUESTIONS_PATTERN_A
     pattern_label = "カジュアル"
+    text_key = "text_cas" # ←追加
 else:
     active_questions = QUESTIONS_PATTERN_B
     pattern_label = "プロフェッショナル"
+    text_key = "text_std" # ←追加
 
 st.markdown("---")
 
@@ -192,15 +194,15 @@ with st.form("via_adt_form"):
         "5: 非常にあてはまる"
     ]
 
-    answers = {}
+answers = {}
     current_cat = ""
     for q in active_questions:
-        if q["category"] != current_cat:
-            current_cat = q["category"]
+        if q["cat"] != current_cat:  # ←修正: "category" を "cat" に
+            current_cat = q["cat"]   # ←修正: "category" を "cat" に
             st.markdown(f"### ◆ {current_cat}")
         
         answers[q["id"]] = st.radio(
-            q["text"],
+            q[text_key],             # ←修正: "text" を text_key に
             via_options,
             index=2,
             key=q["id"]
@@ -245,9 +247,8 @@ if submitted:
                 # APIクライアントの準備
                 client = genai.Client(api_key=api_key)
 
-                # 回答の整形
-                via_summary = "\n".join([f"- {q['text']}: {answers[q['id']]}" for q in active_questions])
-                
+# 回答の整形
+                via_summary = "\n".join([f"- {q[text_key]}: {answers[q['id']]}" for q in active_questions]) # ←修正: "text" を text_key に               
                 adt_summary = f"""
 - Q1 (出来事/現象): {adt_answers['q1']}
 - Q2 (こだわり/価値観): {adt_answers['q2']}
