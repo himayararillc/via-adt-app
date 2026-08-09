@@ -9,11 +9,14 @@ from google import genai
 # ---------------------------------------------------------
 # 1. ページ基本設定
 # ---------------------------------------------------------
-st.set_page_config(
-    page_title="VIA-ADT 統合診断アセスメント",
-    page_icon="🧠",
-    layout="wide"
-)
+st.sidebar.title("⚙️ 設定")
+
+# StreamlitのSecrets（設定画面）からAPIキーを自動取得
+api_key = st.secrets.get("GEMINI_API_KEY", "")
+
+# 万が一Secretsに設定されていない場合のみ、入力フォームを表示（予備）
+if not api_key:
+    api_key = st.sidebar.text_input("Gemini API Key", type="password", help="AI Studioで取得したAPIキーを入力してください")
 
 # ---------------------------------------------------------
 # 2. 質問データの定義（バリエーション対応）
