@@ -381,11 +381,11 @@ QUESTION_BANK_C = [
      "std": "最悪の想定より、実現可能な良いシナリオを先に思い描く方だ。",
      "cas": "最悪のケースより、実現できそうな良いシナリオを先に思い描くほう？"},
     {"cat": "VI. 超越性・精神性の強み (Transcendence)", "strength": "ユーモア",
-     "std": "張り詰めた空気の中でも、和ませる一言を挟むタイミングを見つけられる。",
-     "cas": "張り詰めた空気の中でも、和ませる一言を挟むタイミングを見つけられる？"},
+     "std": "場の雰囲気を和ませたり、周囲の人々を笑わせたり楽しませたりするのが好きだ。",
+     "cas": "場の空気を和ませたり、周りの人を笑わせたり楽しませたりするのが好き？"},
     {"cat": "VI. 超越性・精神性の強み (Transcendence)", "strength": "ユーモア",
-     "std": "自分の失敗すら、あとで笑い話にできる余裕がある。",
-     "cas": "自分の失敗すら、あとで笑い話にできる余裕がある？"},
+     "std": "深刻になりがちな状況でも、クスッと笑える視点を見つけて気持ちを軽くすることができる。",
+     "cas": "深刻になりがちな場面でも、クスッと笑える視点を見つけて空気を軽くできる？"},
     {"cat": "VI. 超越性・精神性の強み (Transcendence)", "strength": "目的意識",
      "std": "日々の忙しさの中でも、「何のためにやっているか」を見失わないようにしている。",
      "cas": "忙しい日々の中でも、「何のためにやってるか」を見失わないようにしてる？"},
@@ -638,7 +638,6 @@ with st.form("via_adt_form"):
     answers = {}
     current_cat = ""
 
-    # ★ 画面上で「Q1, Q2, Q3...」と1から上順に連番で表示されるよう idx を使用
     for idx, q in enumerate(active_questions, start=1):
         if q["cat"] != current_cat:
             current_cat = q["cat"]
@@ -789,13 +788,19 @@ if submitted:
             retry_prompt = (
                 prompt_content
                 + f"\n\n# 再確認（重要）\n前回の出力には禁止された評価的表現（{'、'.join(hits)}）"
-                + "が含まれていました。これらの表現を一切使わず、必ず「状況によるゆらぎ」の言葉で書き直してください。"
+                + "が含まれていたため、これらを一切使わず「状況によるゆらぎ」の言葉で書き直してください。"
             )
             with st.spinner("表現を確認して調整中..."):
                 report_text = call_gemini(retry_prompt)
             hits = find_ng_words(report_text)
 
+        # レポート本体を表示
         st.markdown(report_text)
+
+        # ★ コピー用テキストエリアの表示
+        st.markdown("---")
+        st.subheader("📋 コピー用テキスト（Markdown）")
+        st.text_area("出力結果をクリップボードにコピーしたい場合は、以下のエリアから全選択してご使用ください。", value=report_text, height=300)
 
         if hits:
             st.warning(
