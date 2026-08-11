@@ -823,9 +823,9 @@ if submitted:
 
         # コピー用テキストエリアの表示（次回用データコードも含む全文）
         st.markdown("---")
-        st.subheader("📋 コピー用テキスト（Markdown）")
+        st.subheader("📋 保存用テキスト")
+        st.text_area("コピーして保存していただくことで、次回の診断の際にご自身がいかに成長されたかがより分かりやすくなります。ぜひご利用ください！", value=raw_report_text, height=300)
         st.caption("※レポート全文および最下部に次回用のデータが引き継がれて含まれています。")
-        st.text_area("出力結果をクリップボードにコピーしたい場合は、以下のエリアから全選択してご使用ください。", value=raw_report_text, height=300)
 
         if hits:
             st.warning(
