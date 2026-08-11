@@ -2,6 +2,7 @@
 # VIA × ADT 統合診断アセスメント Web App (Gemini API版 / v2)
 
 import random
+import re
 from collections import OrderedDict, defaultdict
 
 import streamlit as st
@@ -755,7 +756,8 @@ if submitted:
         "1. 「評価・格付け」の排除: クライアントを「低い」「下がった」「未熟」と評価する表現は厳禁。発達段階は「状況による心のゆらぎ」として表現すること。\n"
         "2. 防衛反応の受容: 葛藤やモヤモヤは、心を守るための正常なメカニズム（心の防衛力）としてねぎらいと承認をベースに書くこと。\n"
         "3. 強みの光と影: 現在の悩みは、強みを一所懸命発揮したからこそ生じている「光と影」としてポジティブに捉え直すこと。\n"
-        "4. 【前回データが存在する場合】過去データとの比較: 前回の受検データが提供されている場合は、受検回数（「〇回目の診断ですね」）に触れ、前回の強みや葛藤からの「変化・成長の兆候」をレポート全体で温かく承認すること。\n\n"
+        "4. 【前回データが存在する場合】過去データとの比較: 前回の受検データが提供されている場合は、受検回数（「〇回目の診断ですね」）に触れ、前回の強みや葛藤からの「変化・成長の兆候」をレポート全体で温かく承認すること。\n"
+        "5. 【フォーマット厳守】レポート本文中には絶対に『---』（水平線）やコードブロックを使わないでください。見出し（##や###）と通常の段落のみで構成してください。\n\n"
         "# 【入力データ】\n"
         f"■ お名前: {user_name} 様\n"
         f"■ トーン設定: {mode}\n"
@@ -800,9 +802,9 @@ if submitted:
 
     try:
         with st.spinner("AIがレポートを作成中..."):
-            report_text = call_gemini(prompt_content)
+            raw_report_text = call_gemini(prompt_content)
 
-        hits = find_ng_words(report_text)
+        hits = find_ng_words(raw_report_text)
         if hits:
             retry_prompt = (
                 prompt_content
@@ -810,16 +812,20 @@ if submitted:
                 + "が含まれていたため、これらを一切使わず「状況によるゆらぎ」の言葉で書き直してください。"
             )
             with st.spinner("表現を確認して調整中..."):
-                report_text = call_gemini(retry_prompt)
-            hits = find_ng_words(report_text)
+                raw_report_text = call_gemini(retry_prompt)
+            hits = find_ng_words(raw_report_text)
 
-        # レポート本体を表示
-        st.markdown(report_text)
+        # レポート本文と次回用データ（next_data）を分解処理
+        cleaned_report_text = re.sub(r'```next_data[\s\S]*?```', '', raw_report_text).strip()
 
-        # コピー用テキストエリアの表示
+        # レポート本体を表示（途中で分断されない綺麗で単一の枠に描画）
+        st.markdown(cleaned_report_text)
+
+        # コピー用テキストエリアの表示（次回用データコードも含む全文）
         st.markdown("---")
         st.subheader("📋 コピー用テキスト（Markdown）")
-        st.text_area("出力結果をクリップボードにコピーしたい場合は、以下のエリアから全選択してご使用ください。", value=report_text, height=300)
+        st.caption("※レポート全文および最下部に次回用のデータが引き継がれて含まれています。")
+        st.text_area("出力結果をクリップボードにコピーしたい場合は、以下のエリアから全選択してご使用ください。", value=raw_report_text, height=300)
 
         if hits:
             st.warning(
