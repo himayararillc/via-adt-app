@@ -3,10 +3,12 @@
 
 import random
 import re
+import time
 from collections import OrderedDict, defaultdict
 
 import streamlit as st
 from google import genai
+from google.genai import errors
 
 # ---------------------------------------------------------
 # 1. ページ基本設定
@@ -17,7 +19,8 @@ st.set_page_config(
     layout="wide"
 )
 
-MODEL_NAME = "gemini-3.5-flash"
+PRIMARY_MODEL = "gemini-3.5-flash"
+FALLBACK_MODEL = "gemini-2.5-flash"
 
 # ---------------------------------------------------------
 # 1b. 24の強みの解説辞書（トーン別）
@@ -65,7 +68,7 @@ STRENGTH_DESCRIPTIONS = {
     },
     "親切心": {
         "cas": "見返りを求めず、相手を気遣って自然とサポートを送る力。温かい人間関係を広げます。",
-        "std": "利他的動機に基づき、他者のウェルビーイングを高めるための配慮や支援を進んで行う特性。"
+        "std": "利性的動機に基づき、他者のウェルビーイングを高めるための配慮や支援を進んで行う特性。"
     },
     "社会的知性": {
         "cas": "その場の空気や相手の感情のニュアンスを察する力。対人関係をスムーズに導きます。",
@@ -122,7 +125,7 @@ STRENGTH_DESCRIPTIONS = {
 }
 
 # ---------------------------------------------------------
-# 2. 質問データ（60問マスター：1強みにつき2〜3問）
+# 2. 質問データ（60問マスター）
 # ---------------------------------------------------------
 QUESTION_BANK = [
     # I. 知性・知識の強み (Wisdom)
@@ -325,22 +328,10 @@ _grouped = OrderedDict()
 for q in QUESTION_BANK:
     _grouped.setdefault(q["strength"], []).append(q)
 
-
-def _build_pattern(selector):
-    pattern = []
-    for _strength, items in _grouped.items():
-        pattern.extend(selector(items))
-    return pattern
-
-
-PATTERN_A = _build_pattern(lambda items: items[:2])
-PATTERN_B = _build_pattern(lambda items: items[-2:])
-
 # ---------------------------------------------------------
-# 2b. パターンC（Claudeによる書き下ろし・独自表現）
+# 2b. パターンC
 # ---------------------------------------------------------
 QUESTION_BANK_C = [
-    # I. 知性・知識の強み (Wisdom)
     {"cat": "I. 知性・知識の強み (Wisdom)", "strength": "好奇心",
      "std": "知らない分野の話が出ると、つい質問を重ねて深掘りしたくなる。",
      "cas": "知らない話が出ると、つい質問を重ねてもっと深掘りしたくなる？"},
@@ -372,7 +363,6 @@ QUESTION_BANK_C = [
      "std": "相手の悩みを聞くとき、その人自身よりも状況全体を整理して伝えることが多い。",
      "cas": "相手の悩みを聞くとき、状況全体を整理して伝えることが多い？"},
 
-    # II. 勇気・情熱の強み (Courage)
     {"cat": "II. 勇気・情熱の強み (Courage)", "strength": "勇敢さ",
      "std": "気まずくなるとわかっていても、必要なら異論を口にする。",
      "cas": "気まずくなるとわかってても、必要なら反対意見を言える？"},
@@ -398,7 +388,6 @@ QUESTION_BANK_C = [
      "std": "じっとしているより、体や頭を動かしている方が調子が良いと感じる。",
      "cas": "じっとしてるより、体や頭を動かしてる方が調子いいと感じる？"},
 
-    # III. 人間愛・共感の強み (Humanity)
     {"cat": "III. 人間愛・共感の強み (Humanity)", "strength": "愛する力",
      "std": "相手の弱さや不完全さも含めて、丸ごと受け止められる関係を大事にしている。",
      "cas": "相手の弱さや不完全さも含めて、丸ごと受け止められる関係を大事にしてる？"},
@@ -418,7 +407,6 @@ QUESTION_BANK_C = [
      "std": "初対面の人とでも、相手が話しやすい空気を作るのが得意だ。",
      "cas": "初対面の人とでも、相手が話しやすい空気を作るのが得意？"},
 
-    # IV. 正義感・市民性の強み (Justice)
     {"cat": "IV. 正義感・市民性の強み (Justice)", "strength": "チームワーク",
      "std": "自分の意見が通らなくても、決まった方針には前向きに乗っかれる。",
      "cas": "自分の意見が通らなくても、決まった方針に前向きに乗っかれる？"},
@@ -438,7 +426,6 @@ QUESTION_BANK_C = [
      "std": "メンバーが力を発揮できるよう、あえて自分は前に出ないこともある。",
      "cas": "メンバーが力を発揮できるように、あえて自分は前に出ないこともある？"},
 
-    # V. 節制・自律の強み (Temperance)
     {"cat": "V. 節制・自律の強み (Temperance)", "strength": "寛容さ・許し",
      "std": "相手に嫌なことをされても、時間が経てば案外引きずらない方だ。",
      "cas": "相手に嫌なことをされても、時間が経てば案外引きずらない方？"},
@@ -464,7 +451,6 @@ QUESTION_BANK_C = [
      "std": "カッとなっても、その場で言葉を発する前に一呼吸置ける。",
      "cas": "カッとなっても、口に出す前に一呼吸置ける？"},
 
-    # VI. 超越性・精神性の強み (Transcendence)
     {"cat": "VI. 超越性・精神性の強み (Transcendence)", "strength": "審美眼",
      "std": "プロの仕事や自然の造形に触れると、思わず立ち止まって見入ってしまう。",
      "cas": "プロの仕事や自然の造形に触れると、思わず立ち止まって見入っちゃう？"},
@@ -500,10 +486,8 @@ QUESTION_BANK_C = [
 for _i, _q in enumerate(QUESTION_BANK_C, start=len(QUESTION_BANK) + 1):
     _q["id"] = _i
 
-PATTERN_C = QUESTION_BANK_C
-
 # ---------------------------------------------------------
-# 2c. パターンD（Claudeによる書き下ろし・独自表現、第2弾）
+# 2c. パターンD
 # ---------------------------------------------------------
 QUESTION_BANK_D = [
     {"cat": "I. 知性・知識の強み (Wisdom)", "strength": "好奇心",
@@ -650,23 +634,22 @@ QUESTION_BANK_D = [
      "std": "自分をネタにした軽いジョークで、その場を和ませることができる。",
      "cas": "自分をネタにした軽いジョークで、その場を和ませることができる？"},
     {"cat": "VI. 超越性・精神性の強み (Transcendence)", "strength": "目的意識",
-     "std": "目の前の作業が、より大きな目標にどうつながるかを意識している。",
-     "cas": "目の前の作業が、より大きな目標にどうつながるかを意識してる？"},
+     "std": "日々の忙しさの中でも、「何のためにやっているか」を見失わないようにしている。",
+     "cas": "忙しい日々の中でも、「何のためにやってるか」を見失わないようにしてる？"},
     {"cat": "VI. 超越性・精神性の強み (Transcendence)", "strength": "目的意識",
-     "std": "自分がいなくなっても意味が残るようなことをしたいと思う。",
-     "cas": "自分がいなくなっても意味が残るようなことをしたいと思う？"},
+     "std": "自分の行動が、自分より大きな何かにつながっている感覚を持つことがある。",
+     "cas": "自分の行動が、自分より大きな何かにつながってる感覚を持つことがある？"},
 ]
 
 for _i, _q in enumerate(QUESTION_BANK_D, start=len(QUESTION_BANK) + len(QUESTION_BANK_C) + 1):
     _q["id"] = _i
 
 # ---------------------------------------------------------
-# 2d. 全体プールの構築 ＆ セッションごとのランダム抽選
+# 2d. 全体プール・抽選
 # ---------------------------------------------------------
 _POOL_BY_STRENGTH = OrderedDict()
 for _q in QUESTION_BANK + QUESTION_BANK_C + QUESTION_BANK_D:
     _POOL_BY_STRENGTH.setdefault(_q["strength"], []).append(_q)
-_CAT_BY_STRENGTH = {s: items[0]["cat"] for s, items in _POOL_BY_STRENGTH.items()}
 
 
 def sample_active_questions(rng: random.Random):
@@ -694,7 +677,7 @@ def find_ng_words(text: str):
 
 
 # ---------------------------------------------------------
-# 3. API Key（Secrets管理）
+# 3. API Key Management
 # ---------------------------------------------------------
 try:
     API_KEY = st.secrets["GEMINI_API_KEY"]
@@ -723,8 +706,7 @@ st.caption("設問は毎回ランダムな組み合わせで出題されます�
 if not API_KEY:
     st.error(
         "⚠️ Gemini API Keyが設定されていません。"
-        "ローカル実行時は `.streamlit/secrets.toml` に `GEMINI_API_KEY = \"...\"` を追記してください。"
-        "Streamlit Community Cloudにデプロイする場合は、アプリの Settings → Secrets に同様に追記してください。"
+        "`.streamlit/secrets.toml` に `GEMINI_API_KEY = \"...\"` を追記してください。"
     )
 
 # ---------------------------------------------------------
@@ -787,11 +769,11 @@ with st.form("via_adt_form"):
 
 
 # ---------------------------------------------------------
-# 6. 集計 ＆ Gemini API レポート生成
+# 6. 集計 ＆ Gemini API リトライ・フォールバック機能付き呼び出し
 # ---------------------------------------------------------
 if submitted:
     if not API_KEY:
-        st.error("⚠️ Gemini API Keyが設定されていないため、レポートを生成できません。上記の案内に従ってSecretsを設定してください。")
+        st.error("⚠️ Gemini API Keyが設定されていないため、レポートを生成できません。 Secretsを設定してください。")
         st.stop()
 
     adt_answers = [adt_q1, adt_q2, adt_q3, adt_q4, adt_q5, adt_q6]
@@ -799,7 +781,7 @@ if submitted:
         st.warning("⚠️ 内省質問（Q1〜Q6）をすべて入力してください。")
         st.stop()
 
-    # 集計（strengthごとに2問の平均）
+    # 集計
     strength_scores = defaultdict(list)
     for q in active_questions:
         strength_scores[q["strength"]].append(answers[q["id"]])
@@ -807,7 +789,6 @@ if submitted:
     avg_scores = {s: sum(scores) / len(scores) for s, scores in strength_scores.items()}
     sorted_strengths = sorted(avg_scores.items(), key=lambda x: x[1], reverse=True)
 
-    # 同率順位を考慮した競技ランキング（1224方式）
     ranks = []
     for i, (_name, score) in enumerate(sorted_strengths):
         if i > 0 and abs(score - sorted_strengths[i - 1][1]) < 1e-9:
@@ -820,7 +801,6 @@ if submitted:
     top5_ranks = ranks[:5]
     bottom2_ranks = ranks[-2:]
 
-    # スコアごとにグループ化してプロンプト用テキストを作成
     top_text = ", ".join([f"第{r}位:{name}({sc:.1f}点)" for r, (name, sc) in zip(top5_ranks, top5)])
     bottom_text = ", ".join([f"第{r}位:{name}({sc:.1f}点)" for r, (name, sc) in zip(bottom2_ranks, bottom2)])
 
@@ -850,7 +830,6 @@ if submitted:
             with c2:
                 st.popover("ℹ️").write(f"**【{s_name}】**\n\n{desc}")
 
-    # プロンプト設計
     tone_instruction = (
         "- 全体として専門用語を極力使わず、親しみやすく温かい「伴走者」のような言葉遣いで書いてください。\n"
         "- 難しい心理学用語（Subject/Object、Immunity to Changeなど）は「心のクセ」「お守り」「防衛反応」など分かりやすい言葉に噛み砕いて説明してください。"
@@ -919,13 +898,28 @@ if submitted:
 
     client = genai.Client(api_key=API_KEY)
 
-    def call_gemini(prompt: str) -> str:
-        response = client.models.generate_content(model=MODEL_NAME, contents=prompt)
-        return response.text or ""
+    def call_gemini_with_retry(prompt: str, retries: int = 3, backoff: float = 2.0) -> str:
+        """503/429エラー時に指数の待機時間で再試行し、失敗時は代替モデルに切り替える関数"""
+        for model in [PRIMARY_MODEL, FALLBACK_MODEL]:
+            for attempt in range(retries):
+                try:
+                    response = client.models.generate_content(model=model, contents=prompt)
+                    return response.text or ""
+                except errors.APIError as e:
+                    # 503 UNAVAILABLE や 429 RESOURCE_EXHAUSTED の場合は一時的に待機して再試行
+                    if e.code in [503, 429] and attempt < retries - 1:
+                        sleep_time = backoff ** attempt
+                        time.sleep(sleep_time)
+                        continue
+                    # 試行回数上限に達した場合は代替モデルへスライド
+                    break
+                except Exception:
+                    break
+        raise RuntimeError("Google API サーバーが大変混雑しています。数十秒おいてから再度お試しください。")
 
     try:
         with st.spinner("AIがレポートを作成中..."):
-            raw_report_text = call_gemini(prompt_content)
+            raw_report_text = call_gemini_with_retry(prompt_content)
 
         hits = find_ng_words(raw_report_text)
         if hits:
@@ -935,16 +929,13 @@ if submitted:
                 + "が含まれていたため、これらを一切使わず「状況によるゆらぎ」の言葉で書き直してください。"
             )
             with st.spinner("表現を確認して調整中..."):
-                raw_report_text = call_gemini(retry_prompt)
+                raw_report_text = call_gemini_with_retry(retry_prompt)
             hits = find_ng_words(raw_report_text)
 
-        # レポート本文と次回用データ（next_data）を分解処理
         cleaned_report_text = re.sub(r'```next_data[\s\S]*?```', '', raw_report_text).strip()
 
-        # レポート本体を表示（途中で分断されない綺麗で単一の枠に描画）
         st.markdown(cleaned_report_text)
 
-        # コピー用テキストエリアの表示（ワンタップ全選択・コピーボタン付きコードブロック化）
         st.markdown("---")
         st.subheader("📋 保存用テキスト")
         st.caption("👇 スマホの方は枠内右上の『コピーアイコン』を1タップするだけで全文コピーできます！保存しておくと次回診断時に成長変化を比較できます。")
@@ -958,8 +949,4 @@ if submitted:
             )
 
     except Exception as e:
-        st.error(
-            "⚠️ レポート生成中にエラーが発生しました。API Keyの有効性・利用上限・ネットワーク接続をご確認の上、"
-            "もう一度お試しください。"
-        )
-        st.exception(e)
+        st.error(f"⚠️ {str(e)}")
