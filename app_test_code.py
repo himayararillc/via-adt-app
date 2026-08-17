@@ -831,17 +831,20 @@ if submitted:
 
     col1, col2 = st.columns(2)
     with col1:
-        st.subheader("🔍 いま強く現れている特徴 (Top 5)")
+        # (Top 5) を削除
+        st.subheader("🔍 いま強く現れている特徴")
         for rank, (s_name, score) in zip(top5_ranks, top5):
             desc = STRENGTH_DESCRIPTIONS.get(s_name, {}).get(tone_key, "解説準備中")
             c1, c2 = st.columns([0.85, 0.15])
             with c1:
+                # 「特徴 1：」のような表記もシンプルに「・」や「項」にするか、そのまま「特徴 1：」
                 st.write(f"**特徴 {rank}：{s_name}** （スコア: {score:.1f} / 5.0）")
             with c2:
                 st.popover("ℹ️").write(f"**【{s_name}】**\n\n{desc}")
 
     with col2:
-        st.subheader("🌱 伸びしろとなる領域 (Bottom 2)")
+        # (Bottom 2) を削除
+        st.subheader("🌱 伸びしろとなる領域")
         for rank, (s_name, score) in zip(bottom2_ranks, bottom2):
             desc = STRENGTH_DESCRIPTIONS.get(s_name, {}).get(tone_key, "解説準備中")
             c1, c2 = st.columns([0.85, 0.15])
