@@ -12,7 +12,7 @@ st.set_page_config(
     layout="centered"
 )
 
-# UIカスタムスタイル（落ち着いた読みやすいデザイン）
+# UIカスタムスタイル（unsafe_allow_html=True に修正）
 st.markdown("""
     <style>
     .main {
@@ -39,12 +39,11 @@ st.markdown("""
         margin-bottom: 2rem;
     }
     </style>
-""", unsafe_style=True)
+""", unsafe_allow_html=True)
 
 # ==========================================
 # 2. Gemini APIの設定
 # ==========================================
-# 環境変数またはStreamlit SecretsからAPIキーを取得
 api_key = os.environ.get("GEMINI_API_KEY")
 
 if not api_key:
@@ -163,7 +162,6 @@ VIA_ITEMS = [
 # 5. UIレイアウト（入力フォーム）
 # ==========================================
 
-# ヘッダーエリア
 st.markdown("""
 <div class="header-box">
     <h2>🕊️ セルフコーチングツール</h2>
@@ -172,9 +170,8 @@ st.markdown("""
         『正しさ』の重荷をそっと下ろして、もっと自由を感じ、根っこから満たされるための10分セルフワーク。
     </p>
 </div>
-""", unsafe_style=True)
+""", unsafe_allow_html=True)
 
-# フォーム開始
 with st.form("assessment_form"):
     st.subheader("Step 1: あなたの中でいま強く現れている特徴")
     st.caption("以下の24の要素から、ご自身に「あてはまる」「よく発揮している」と感じるものを5つ程度選んでください。")
@@ -216,7 +213,6 @@ if submitted:
         st.warning("⚠️ Step 2の内省の問い（特にQ1, Q2）にご記入ください。")
     else:
         with st.spinner("あなたの回答を丁寧に読み解き、メッセージを作成しています..."):
-            # プロンプトへ渡すユーザー入力データの整形
             user_payload = f"""
 ### 【ユーザー入力データ】
 
@@ -231,7 +227,6 @@ if submitted:
 """
 
             try:
-                # Gemini 1.5 Pro（またはFlash）モデルの呼び出し
                 model = genai.GenerativeModel(
                     model_name="gemini-1.5-pro-latest",
                     system_instruction=SYSTEM_PROMPT
@@ -239,12 +234,10 @@ if submitted:
 
                 response = model.generate_content(user_payload)
 
-                # 結果表示
                 st.success("✨ レポートの生成が完了しました！")
                 st.markdown("---")
                 st.markdown(response.text)
 
-                # アフターフォローのメッセージ
                 st.info("💡 また日常生活でふとモヤモヤしたり、力んでしまっていると感じた時は、いつでもこのツールを開いてみてくださいね。")
 
             except Exception as e:
