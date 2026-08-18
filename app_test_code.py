@@ -994,9 +994,19 @@ if submitted:
 
     client = genai.Client(api_key=API_KEY)
 
+    import time
+
     def call_gemini(prompt: str) -> str:
-        response = client.models.generate_content(model=MODEL_NAME, contents=prompt)
-        return response.text or ""
+    max_retries = 3
+    for attempt in range(max_retries):
+        try:
+            response = client.models.generate_content(model=MODEL_NAME, contents=prompt)
+            return response.text or ""
+        except Exception as e:
+            if "503" in str(e) and attempt < max_retries - 1:
+                time.sleep(3)  # 3秒待ってから再試行
+                continue
+            raise e
 
     try:
         with st.spinner("AIがレポートを作成中..."):
