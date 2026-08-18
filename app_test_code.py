@@ -6,7 +6,7 @@ import re
 from collections import OrderedDict, defaultdict
 
 import streamlit as st
-from google import generativeai
+from google import genei
 
 # ---------------------------------------------------------
 # 1. ページ基本設定
